@@ -94,6 +94,7 @@ button { cursor: pointer; }
   border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 500;
 }
 .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); font-weight: 600; }
+.chip:disabled { opacity: .45; cursor: not-allowed; }
 .swatches { display: inline-flex; gap: 6px; align-items: center; }
 .sw { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); padding: 0; }
 .sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
@@ -196,6 +197,10 @@ summary small { font-weight: 500; color: var(--muted); margin-left: 8px; }
         <button class="chip" type="button" data-loc="on" aria-pressed="true">With PRODDATUR</button>
         <button class="chip" type="button" data-loc="off" aria-pressed="false">Without</button>
       </div>
+      <div class="seg" role="group" aria-label="PRODDATUR inside or outside the box">
+        <button class="chip" type="button" data-in="0" aria-pressed="true">Outside the box</button>
+        <button class="chip" type="button" data-in="1" aria-pressed="false">Inside the box</button>
+      </div>
       <div class="seg" role="group" aria-label="Colour version">
         <button class="chip" type="button" data-version="color" aria-pressed="true">Full colour</button>
         <button class="chip" type="button" data-version="white" aria-pressed="false">White</button>
@@ -216,10 +221,10 @@ summary small { font-weight: 500; color: var(--muted); margin-left: 8px; }
   </main>
 
   <aside class="panel" aria-label="Controls">
+    <details open><summary><span>PRODDATUR <small id="locMode"></small></span></summary><div class="group" id="gLoc"></div></details>
     <details open id="dLayout"><summary><span>Layout <small id="layoutFmt"></small></span></summary><div class="group" id="gLayout"></div></details>
     <details open><summary>Monogram</summary><div class="group" id="gMono"></div></details>
     <details open><summary>Name</summary><div class="group" id="gName"></div></details>
-    <details open><summary>PRODDATUR</summary><div class="group" id="gLoc"></div></details>
     <details open><summary>Colours</summary><div class="group" id="gColor"></div></details>
     <details open><summary>Export</summary>
       <div class="group">
@@ -903,6 +908,10 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
       }).join("");
     document.querySelectorAll("[data-version]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.version === state.version)));
     document.querySelectorAll("[data-loc]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.loc === "on") === !!P().c.loc)));
+    document.querySelectorAll("[data-in]").forEach((b) => {
+      b.setAttribute("aria-pressed", String((b.dataset.in === "1") === !!P().c.inside));
+      b.disabled = !P().c.loc;
+    });
     document.querySelectorAll("[data-bg]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.bg === state.bg)));
     const brandSw = document.querySelector('[data-bg="brand"]');
     if (brandSw) brandSw.style.background = mainColor();
@@ -1041,6 +1050,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     const g = $("gLoc");
     g.innerHTML = "";
     const c = P().c;
+    $("locMode").textContent = !c.loc ? "off" : c.inside ? "inside the box" : "outside the box";
     if (!c.loc) {
       const p = document.createElement("p");
       p.className = "note";
@@ -1048,16 +1058,6 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
       g.appendChild(p);
       return;
     }
-    const where = document.createElement("div");
-    where.className = "seg";
-    where.setAttribute("role", "group");
-    where.setAttribute("aria-label", "Inside or outside the box");
-    where.innerHTML = `<button class="chip" type="button" data-in="1" aria-pressed="${!!c.inside}">Inside the box</button>` +
-      `<button class="chip" type="button" data-in="0" aria-pressed="${!c.inside}">Outside the box</button>`;
-    g.appendChild(where);
-    where.querySelectorAll("[data-in]").forEach((b) => b.addEventListener("click", () => {
-      c.inside = b.dataset.in === "1"; renderLoc(); changed();
-    }));
     if (c.inside) {
       const box = document.createElement("div");
       box.className = "pair";
@@ -1121,6 +1121,10 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
   document.querySelectorAll("[data-bg]").forEach((b) => b.addEventListener("click", () => { state.bg = b.dataset.bg; renderStage(); persist(); }));
   document.querySelectorAll("[data-loc]").forEach((b) => b.addEventListener("click", () => {
     P().c.loc = b.dataset.loc === "on";
+    renderLoc(); changed();
+  }));
+  document.querySelectorAll("[data-in]").forEach((b) => b.addEventListener("click", () => {
+    P().c.inside = b.dataset.in === "1";
     renderLoc(); changed();
   }));
   $("zoom").addEventListener("input", (e) => { state.zoom = +e.target.value; renderStage(); persist(); });
