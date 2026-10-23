@@ -192,6 +192,10 @@ summary small { font-weight: 500; color: var(--muted); margin-left: 8px; }
   <main class="stage">
     <div class="toolbar">
       <div class="seg" id="formats" role="group" aria-label="Format"></div>
+      <div class="seg" role="group" aria-label="PRODDATUR">
+        <button class="chip" type="button" data-loc="on" aria-pressed="true">With PRODDATUR</button>
+        <button class="chip" type="button" data-loc="off" aria-pressed="false">Without</button>
+      </div>
       <div class="seg" role="group" aria-label="Colour version">
         <button class="chip" type="button" data-version="color" aria-pressed="true">Full colour</button>
         <button class="chip" type="button" data-version="white" aria-pressed="false">White</button>
@@ -215,6 +219,7 @@ summary small { font-weight: 500; color: var(--muted); margin-left: 8px; }
     <details open id="dLayout"><summary><span>Layout <small id="layoutFmt"></small></span></summary><div class="group" id="gLayout"></div></details>
     <details open><summary>Monogram</summary><div class="group" id="gMono"></div></details>
     <details open><summary>Name</summary><div class="group" id="gName"></div></details>
+    <details open><summary>PRODDATUR</summary><div class="group" id="gLoc"></div></details>
     <details open><summary>Colours</summary><div class="group" id="gColor"></div></details>
     <details open><summary>Export</summary>
       <div class="group">
@@ -229,7 +234,7 @@ summary small { font-weight: 500; color: var(--muted); margin-left: 8px; }
           <button class="btn" type="button" id="exSvg">SVG</button>
           <button class="btn" type="button" id="exZip">All formats (ZIP)</button>
         </div>
-        <p class="note" id="exNote">PNG and SVG save the format on screen. The ZIP holds every format of this logo in full colour and white, as SVG and PNG.</p>
+        <p class="note" id="exNote">PNG and SVG save the format on screen. The ZIP holds every format of this logo in full colour and white, with and without PRODDATUR, as SVG and PNG.</p>
       </div>
     </details>
     <details open id="settingsDetails" hidden><summary>Settings</summary>
@@ -284,7 +289,18 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     gap: 14, weight: 32, notch: 22, capDepth: 30,
     text1: "DEVANSH", text2: "MARKETING",
     w1: 800, w2: 600, tr1: 0.02, tr2: 0.30, match: true, size2: 0.33, lineGap: 0.385,
+    // location line
+    text3: "PRODDATUR", loc: true, place3: "name", align3: "full", w3: 500,
+    size3: 0.80, tr3: 0.45, gap3: 0.30, sizeB: 0.075, gapB: 0.10,
   };
+
+  const LOC_CONTROLS = {
+    name: [["size3", "Size (to MARKETING)", 0.4, 1.6, 0.01], ["gap3", "Space above", 0, 1.2, 0.01]],
+    below: [["sizeB", "Size (to logo height)", 0.03, 0.2, 0.001], ["gapB", "Space above", 0, 0.5, 0.005]],
+    spacing: ["tr3", "Letter spacing (when not full width)", 0, 1.2, 0.01],
+  };
+  // formats where PRODDATUR can sit below the whole logo; panels keep it in the name block
+  const BELOW_OK = { split: ["h"], open: ["h", "v"], line: ["h"], frame: ["h"] };
 
   const MONO_CONTROLS = [
     ["gap", "Gap between pieces", 0, 40, 0.5],
@@ -384,7 +400,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
   function normalize(k, p) {
     const d = setDefaults(k);
     if (!p || typeof p !== "object") return d;
-    const out = { c: { ...d.c, ...(p.c || {}), text1: COMMON.text1, text2: COMMON.text2 }, L: {}, colors: { ...d.colors, ...(p.colors || {}) } };
+    const out = { c: { ...d.c, ...(p.c || {}), text1: COMMON.text1, text2: COMMON.text2, text3: COMMON.text3 }, L: {}, colors: { ...d.colors, ...(p.colors || {}) } };
     for (const f in d.L) out.L[f] = { ...d.L[f], ...((p.L || {})[f] || {}) };
     return out;
   }
@@ -440,12 +456,39 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
       L2 = layoutText(c.text2, c.w2, cap2, c.tr2);
     }
     const gap = hasTwo ? cap1 * c.lineGap : 0;
-    const H = cap1 + gap + cap2;
-    const W = Math.max(L1.w, L2 ? L2.w : 0);
+    let H = cap1 + gap + cap2;
+    let W = Math.max(L1.w, L2 ? L2.w : 0);
     const cx = align === "center";
     let svg = textSvg(L1, x + (cx ? (W - L1.w) / 2 : 0), top + cap1, col1);
     if (L2) svg += textSvg(L2, x + (cx ? (W - L2.w) / 2 : 0), top + H, col2);
+    if (c.loc && c.place3 !== "below-active") {
+      const base = cap2 || cap1 * 0.33;
+      const cap3 = base * c.size3;
+      const L3 = locLine(c, cap3, W);
+      const y3 = top + H + cap1 * c.gap3 + cap3;
+      svg += textSvg(L3, x + alignX(c.align3, W, L3.w, cx), y3, col2);
+      H = y3 - top;
+      W = Math.max(W, L3.w);
+    }
     return { svg, W, H };
+  }
+
+  /** PRODDATUR laid out at cap height `cap`; full width = tracked to `W`. */
+  function locLine(c, cap, W) {
+    let tr = c.tr3;
+    const n = [...String(c.text3)].length;
+    if (c.align3 === "full" && W > 0 && n > 1) {
+      const L0 = layoutText(c.text3, c.w3, cap, 0);
+      const s = cap / (FONT.w[String(c.w3)] || FONT.w["500"]).cap;
+      tr = Math.max(0, (W - L0.w) / ((n - 1) * FONT.upem * s));
+    }
+    return layoutText(c.text3, c.w3, cap, tr);
+  }
+
+  function alignX(a, W, w, centred) {
+    if (a === "right") return W - w;
+    if (a === "center" || (centred && a !== "left")) return (W - w) / 2;
+    return 0;
   }
 
   // ------------------------------------------------------------- monogram
@@ -672,7 +715,15 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     const P = normalize(setKey, params);
     const main = P.colors[SETS[setKey].main];
     const C = version === "white" ? flip(P.colors, main) : { ...P.colors };
-    return BUILD[setKey][fmt](P, C, main);
+    const below = P.c.loc && P.c.place3 === "below" && (BELOW_OK[setKey] || []).includes(fmt);
+    if (!below) return BUILD[setKey][fmt](P, C, main);
+    // PRODDATUR under the whole logo
+    const r = BUILD[setKey][fmt]({ ...P, c: { ...P.c, place3: "below-active" } }, C, main);
+    const cap = r.h * P.c.sizeB;
+    const L = locLine(P.c, cap, r.w);
+    const y = r.h + r.h * P.c.gapB + cap;
+    const svg = r.svg + textSvg(L, alignX(P.c.align3, r.w, L.w, false), y, C.text2);
+    return { svg, w: Math.max(r.w, L.w), h: y, bleed: r.bleed };
   }
 
   function wrap(body, w, h, pad, bg) {
@@ -687,7 +738,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     return { svg: wrap(r.svg, r.w, r.h, r.bleed, bg), w: r.w + 2 * r.bleed, h: r.h + 2 * r.bleed };
   }
 
-  const API = { SAPPHIRE, WHITE, COMMON, MONO_CONTROLS, SETS, defaults, setDefaults, normalize, setFont, build, wrap, documentSvg, isWhite };
+  const API = { SAPPHIRE, WHITE, COMMON, MONO_CONTROLS, LOC_CONTROLS, BELOW_OK, SETS, defaults, setDefaults, normalize, setFont, build, wrap, documentSvg, isWhite };
   root.LogoCore = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -812,6 +863,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
         return `<figure><div class="tile" style="background:${tileBg}">${d.svg.replace("<svg ", `<svg style="width:${w}px;height:${h}px" `)}</div><figcaption>${h} px tall</figcaption></figure>`;
       }).join("");
     document.querySelectorAll("[data-version]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.version === state.version)));
+    document.querySelectorAll("[data-loc]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.loc === "on") === !!P().c.loc)));
     document.querySelectorAll("[data-bg]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.bg === state.bg)));
     const brandSw = document.querySelector('[data-bg="brand"]');
     if (brandSw) brandSw.style.background = mainColor();
@@ -946,7 +998,47 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     });
   }
 
-  function renderControls() { renderLayout(); renderMono(); renderName(); renderColors(); }
+  function renderLoc() {
+    const g = $("gLoc");
+    g.innerHTML = "";
+    const c = P().c;
+    if (!c.loc) {
+      const p = document.createElement("p");
+      p.className = "note";
+      p.textContent = "PRODDATUR is off for this logo. Switch it on with “With PRODDATUR” above the preview.";
+      g.appendChild(p);
+      return;
+    }
+    const box = document.createElement("div");
+    box.className = "pair";
+    box.innerHTML =
+      `<label class="field" for="place3"><span>Position</span><select class="sel" id="place3">` +
+      `<option value="name">Under MARKETING</option><option value="below">Below the whole logo</option></select></label>` +
+      `<label class="field" for="align3"><span>Alignment</span><select class="sel" id="align3">` +
+      `<option value="full">Full width</option><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></label>` +
+      `<label class="field" for="w3"><span>Weight</span><select class="sel" id="w3"></select></label>`;
+    g.appendChild(box);
+    $("w3").innerHTML = WEIGHTS.map(([v, n]) => `<option value="${v}">${n} ${v}</option>`).join("");
+    $("place3").value = c.place3; $("align3").value = c.align3; $("w3").value = c.w3;
+    $("place3").addEventListener("change", (e) => { c.place3 = e.target.value; renderLoc(); changed(); });
+    $("align3").addEventListener("change", (e) => { c.align3 = e.target.value; renderLoc(); changed(); });
+    $("w3").addEventListener("change", (e) => { c.w3 = +e.target.value; changed(); });
+    const below = c.place3 === "below";
+    if (below && !(LC.BELOW_OK[state.set] || []).includes(state.fmt)) {
+      const p = document.createElement("p");
+      p.className = "note";
+      p.textContent = "This format sits on a panel, so PRODDATUR stays under MARKETING here.";
+      g.appendChild(p);
+    }
+    for (const [key, label, min, max, step] of LC.LOC_CONTROLS[below ? "below" : "name"]) {
+      slider(g, label, () => c[key], (v) => { c[key] = v; }, min, max, step, LC.COMMON[key]);
+    }
+    const [k, label, min, max, step] = LC.LOC_CONTROLS.spacing;
+    const row = slider(g, label, () => c[k], (v) => { c[k] = v; }, min, max, step, LC.COMMON[k]);
+    if (c.align3 === "full") row.querySelectorAll("input, button").forEach((i) => { i.disabled = true; });
+  }
+
+  function renderControls() { renderLayout(); renderMono(); renderName(); renderLoc(); renderColors(); }
 
   // ---------------------------------------------------------------- toolbar
   document.querySelectorAll("[data-version]").forEach((b) => b.addEventListener("click", () => {
@@ -956,6 +1048,10 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     renderStage(); persist();
   }));
   document.querySelectorAll("[data-bg]").forEach((b) => b.addEventListener("click", () => { state.bg = b.dataset.bg; renderStage(); persist(); }));
+  document.querySelectorAll("[data-loc]").forEach((b) => b.addEventListener("click", () => {
+    P().c.loc = b.dataset.loc === "on";
+    renderLoc(); changed();
+  }));
   $("zoom").addEventListener("input", (e) => { state.zoom = +e.target.value; renderStage(); persist(); });
   $("guides").addEventListener("change", (e) => { state.guides = e.target.checked; renderStage(); persist(); });
 
@@ -1009,7 +1105,8 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
   // ---------------------------------------------------------------- export
   let DL = null;
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const fileBase = (k, f, v) => `devansh-${slug(SETS[k].name)}-${slug(SETS[k].formats[f])}-${v === "white" ? "white" : "colour"}`;
+  const fileBase = (k, f, v, loc) => `devansh-${slug(SETS[k].name)}-${slug(SETS[k].formats[f])}-${v === "white" ? "white" : "colour"}` +
+    ((loc === undefined ? state.params[k].c.loc : loc) ? "-proddatur" : "");
 
   function docFor(k, f, v, withBg) {
     const bg = withBg ? (state.bg === "brand" ? mainColor(k) : BG[state.bg] || null) : null;
@@ -1069,14 +1166,20 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     const size = +$("pngSize").value;
     const zip = new JSZip();
     const k = state.set;
-    for (const f in SETS[k].formats) {
-      for (const v of ["color", "white"]) {
-        const d = docFor(k, f, v, false);
-        const base = fileBase(k, f, v);
-        zip.file(`svg/${base}.svg`, d.svg);
-        zip.file(`png/${base}-${size}px.png`, await toPng(d.svg, d.w, d.h, size));
+    const keep = state.params[k].c.loc;
+    for (const loc of [true, false]) {
+      state.params[k].c.loc = loc;
+      const dir = loc ? "with-proddatur" : "without-proddatur";
+      for (const f in SETS[k].formats) {
+        for (const v of ["color", "white"]) {
+          const d = docFor(k, f, v, false);
+          const base = fileBase(k, f, v, loc);
+          zip.file(`${dir}/svg/${base}.svg`, d.svg);
+          zip.file(`${dir}/png/${base}-${size}px.png`, await toPng(d.svg, d.w, d.h, size));
+        }
       }
     }
+    state.params[k].c.loc = keep;
     zip.file("settings.json", JSON.stringify({ logo: k, name: SETS[k].name, params: state.params[k] }, null, 2));
     const blob = await zip.generateAsync({ type: "blob" });
     await saveFile(`devansh-${slug(SETS[k].name)}-logo-set.zip`, blob);
