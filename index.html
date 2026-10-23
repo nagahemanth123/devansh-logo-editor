@@ -290,8 +290,9 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     text1: "DEVANSH", text2: "MARKETING",
     w1: 800, w2: 600, tr1: 0.02, tr2: 0.30, match: true, size2: 0.33, lineGap: 0.385,
     // location line, always outside the logo
-    text3: "PRODDATUR", loc: true, place3: "below", align3: "center", alignS: "bottom", w3: 500,
+    text3: "PRODDATUR", loc: true, inside: false, place3: "below", align3: "center", alignS: "bottom", w3: 500,
     sizeL: 0.42, gapL: 0.9, tr3: 0.5,
+    alignIn: "full", size3: 0.80, gap3: 0.30,          // inside the box, under MARKETING
   };
 
   const LOC_PLACES = [["below", "Below the logo"], ["right", "Right side"], ["left", "Left side"],
@@ -300,9 +301,11 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     below: [["center", "Centre"], ["left", "Left"], ["right", "Right"], ["full", "Full width"]],
     side: [["bottom", "Bottom"], ["middle", "Middle"], ["top", "Top"]],
     vertical: [["bottom", "Bottom"], ["middle", "Middle"], ["top", "Top"], ["full", "Full height"]],
+    inside: [["full", "Full width"], ["left", "Left"], ["center", "Centre"], ["right", "Right"]],
   };
   const LOC_CONTROLS = {
     sliders: [["sizeL", "Size (to DEVANSH)", 0.2, 1.2, 0.01], ["gapL", "Space from the logo", 0, 3, 0.05]],
+    inside: [["size3", "Size (to MARKETING)", 0.4, 1.6, 0.01], ["gap3", "Space above", 0, 1.2, 0.01]],
     spacing: ["tr3", "Letter spacing (when not full)", 0, 1.5, 0.01],
   };
   // formats that carry the name, and so can carry PRODDATUR
@@ -410,6 +413,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     if (!LOC_PLACES.some(([k]) => k === out.c.place3)) out.c.place3 = COMMON.place3;
     if (!LOC_ALIGN.below.some(([k]) => k === out.c.align3)) out.c.align3 = COMMON.align3;
     if (![...LOC_ALIGN.vertical].some(([k]) => k === out.c.alignS)) out.c.alignS = COMMON.alignS;
+    if (!LOC_ALIGN.inside.some(([k]) => k === out.c.alignIn)) out.c.alignIn = COMMON.alignIn;
     for (const f in d.L) out.L[f] = { ...d.L[f], ...((p.L || {})[f] || {}) };
     return out;
   }
@@ -470,6 +474,15 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     const cx = align === "center";
     let svg = textSvg(L1, x + (cx ? (W - L1.w) / 2 : 0), top + cap1, col1);
     if (L2) svg += textSvg(L2, x + (cx ? (W - L2.w) / 2 : 0), top + H, col2);
+    if (c.loc && c.inside) {
+      const cap3 = (cap2 || cap1 * 0.33) * c.size3;
+      const full = c.alignIn === "full";
+      const L3 = locLine(c, cap3, full ? W : 0);
+      const y3 = top + H + cap1 * c.gap3 + cap3;
+      svg += textSvg(L3, x + (full ? 0 : alignX(c.alignIn, W, L3.w, cx)), y3, col2);
+      H = y3 - top;
+      W = Math.max(W, L3.w);
+    }
     return { svg, W, H };
   }
 
@@ -716,7 +729,7 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
     const main = P.colors[SETS[setKey].main];
     const C = version === "white" ? flip(P.colors, main) : { ...P.colors };
     const r = BUILD[setKey][fmt](P, C, main);
-    if (!P.c.loc || !(HAS_NAME[setKey] || []).includes(fmt)) return r;
+    if (!P.c.loc || P.c.inside || !(HAS_NAME[setKey] || []).includes(fmt)) return r;
     return addLocation(r, P.c, C[SETS[setKey].main]);
   }
 
@@ -1033,6 +1046,36 @@ const FONT = {"upem":1000,"w":{"300":{"cap":700,"g":{" ":[257,0,0,""],"!":[252,8
       p.className = "note";
       p.textContent = "PRODDATUR is off for this logo. Switch it on with “With PRODDATUR” above the preview.";
       g.appendChild(p);
+      return;
+    }
+    const where = document.createElement("div");
+    where.className = "seg";
+    where.setAttribute("role", "group");
+    where.setAttribute("aria-label", "Inside or outside the box");
+    where.innerHTML = `<button class="chip" type="button" data-in="1" aria-pressed="${!!c.inside}">Inside the box</button>` +
+      `<button class="chip" type="button" data-in="0" aria-pressed="${!c.inside}">Outside the box</button>`;
+    g.appendChild(where);
+    where.querySelectorAll("[data-in]").forEach((b) => b.addEventListener("click", () => {
+      c.inside = b.dataset.in === "1"; renderLoc(); changed();
+    }));
+    if (c.inside) {
+      const box = document.createElement("div");
+      box.className = "pair";
+      box.innerHTML =
+        `<label class="field" for="alignIn"><span>Alignment under MARKETING</span><select class="sel" id="alignIn"></select></label>` +
+        `<label class="field" for="w3"><span>Weight</span><select class="sel" id="w3"></select></label>`;
+      g.appendChild(box);
+      $("alignIn").innerHTML = LC.LOC_ALIGN.inside.map(([v, n]) => `<option value="${v}">${n}</option>`).join("");
+      $("w3").innerHTML = WEIGHTS.map(([v, n]) => `<option value="${v}">${n} ${v}</option>`).join("");
+      $("alignIn").value = c.alignIn; $("w3").value = c.w3;
+      $("alignIn").addEventListener("change", (e) => { c.alignIn = e.target.value; renderLoc(); changed(); });
+      $("w3").addEventListener("change", (e) => { c.w3 = +e.target.value; changed(); });
+      for (const [key, label, min, max, step] of LC.LOC_CONTROLS.inside) {
+        slider(g, label, () => c[key], (v) => { c[key] = v; }, min, max, step, LC.COMMON[key]);
+      }
+      const [k, label, min, max, step] = LC.LOC_CONTROLS.spacing;
+      const row = slider(g, label, () => c[k], (v) => { c[k] = v; }, min, max, step, LC.COMMON[k]);
+      if (c.alignIn === "full") row.querySelectorAll("input, button").forEach((i) => { i.disabled = true; });
       return;
     }
     const kind = c.place3 === "below" ? "below" : c.place3.endsWith("-v") ? "vertical" : "side";
